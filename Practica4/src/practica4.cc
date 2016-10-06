@@ -1,0 +1,753 @@
+/******************************************************************************
+ *
+ * IG - Informática Gráfica
+ * Grado en Ingeniería Informática
+ *
+ * 2015 - Adrián Portillo Sánchez
+ * ---------------------------------------------
+ *
+ *  Práctica 4 - Iluminación y texturas
+ *
+ *  Permitimos la carga de ficheros PLY así como la creación fija de un cubo y
+ *  una pirámide, se permite el cambio de modo de visualización con las teclas
+ *  1 = Puntos | 2 = Alambre | 3 = Solido | 4 = Ajedrez
+ *
+ *
+ ******************************************************************************/
+
+#include <stdlib.h> // pulls in declaration of malloc, free
+#include "stdio.h"
+#include <iostream>
+#ifdef __MACH__ // Incluimos las librerías necesarias para que funcione en OSX
+	#include <GLUT/glut.h>
+#else
+	#include <GL/glut.h>
+#endif
+
+#include <ctype.h>
+
+#include <model_cube.h>
+#include <model_pyramid.h>
+#include <model_ply.h>
+#include <model_revolution.h>
+#include <model_cuadro.h>
+
+
+// Atributos
+int modo = 5, modelView = 1, numMaterial = 0;  // Aqui almacenaremos el modo de visualización y la figura a  ver.
+
+Model * model1 = new Model(); // Aqui guardamos la figura cargada
+Model * lata_sup = new Model();
+Model * lata_cue = new Model();
+Model * lata_inf = new Model();
+Model * peon1 = new Model();
+Model * peon2 = new Model();
+Model * peon3 = new Model();
+Model * tierra = new Model();
+Model * estrellas = new Model();
+Model * luna = new Model();
+Model * sol = new Model();
+cuadro cuad;
+
+
+bool animar_luz = false, luz = true, luz1 = true, luz2 = true;
+float pos_tierra = 0.0, pos_luna = 0.0;
+float mx = 0, my = 0, mz = 0;
+GLfloat light_position[4] = {15.0, 0.0, 15.0, 1.0};
+
+
+
+// Model * model2 = new Model(); // Aqui guardamos la figura cargada
+
+
+// tamaño de los ejes
+const int AXIS_SIZE=5000;
+
+// variables que definen la posicion de la camara en coordenadas polares
+GLfloat Observer_distance;
+GLfloat Observer_angle_x;
+GLfloat Observer_angle_y;
+
+// variables que controlan la ventana y la transformacion de perspectiva
+GLfloat Window_width,Window_height,Front_plane,Back_plane;
+
+// variables que determninan la posicion y tamaño de la ventana X
+int UI_window_pos_x=50,UI_window_pos_y=50,UI_window_width=1920,UI_window_height=1080;
+
+
+
+//**************************************************************************
+//
+//***************************************************************************
+
+void clear_window()
+{
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+}
+
+
+//**************************************************************************
+// Funcion para definir la transformación de proyeccion
+//***************************************************************************
+
+void change_projection()
+{
+
+	// Solucion para el ratio al maximizar
+	const GLfloat ratio = GLfloat(UI_window_height) / GLfloat(UI_window_width);
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	// formato(x_minimo,x_maximo, y_minimo, y_maximo,Front_plane, plano_traser)
+	//  Front_plane>0  Back_plane>PlanoDelantero)
+	// glFrustum(-Window_width,Window_width,-Window_height,Window_height,Front_plane,Back_plane);
+	glFrustum(-Window_width,Window_width,-Window_height * ratio,Window_height * ratio,Front_plane,Back_plane);
+}
+
+//**************************************************************************
+// Funcion para definir la transformación de vista (posicionar la camara)
+//***************************************************************************
+
+void change_observer()
+{
+
+	// posicion del observador
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	glTranslatef(0,0,-Observer_distance);
+	glRotatef(Observer_angle_x,1,0,0);
+	glRotatef(Observer_angle_y,0,1,0);
+}
+
+//**************************************************************************
+// Funcion que dibuja los ejes utilizando la primitiva grafica de lineas
+//***************************************************************************
+
+void draw_axis()
+{
+	glBegin(GL_LINES);
+	// eje X, color rojo
+	glColor3f(1,0,0);
+	glVertex3f(-AXIS_SIZE,0,0);
+	glVertex3f(AXIS_SIZE,0,0);
+	// eje Y, color verde
+	glColor3f(0,1,0);
+	glVertex3f(0,-AXIS_SIZE,0);
+	glVertex3f(0,AXIS_SIZE,0);
+	// eje Z, color azul
+	glColor3f(0,0,1);
+	glVertex3f(0,0,-AXIS_SIZE);
+	glVertex3f(0,0,AXIS_SIZE);
+	glEnd();
+}
+
+
+//**************************************************************************
+// Funcion que dibuja los objetos
+//***************************************************************************
+
+void draw_objects()
+{
+	glMatrixMode(GL_MODELVIEW);
+	glTranslatef(mx,my,mz);
+	Model::DrawMode mode;
+	// Pintamos el objeto seleccionado dependiendo del modo
+	switch (modo)
+	{
+		case 1: //Puntos
+			mode = Model::POINTS;
+			break;
+		case 2: //Aristas
+			mode = Model::LINES;
+			break;
+		case 3: //Solido
+			mode = Model::SOLID;
+			break;
+		case 4: //Ajedrez
+			mode = Model::CHESS;
+			break;
+		case 5: //Suavizado Plano
+			mode = Model::FLAT;
+			break;
+		case 6: //Suavizado Gouraud
+			mode = Model::SMOOTH;
+			break;
+		case 7: //TODO
+			mode = Model::ALL;
+			break;
+		default:
+			modo = 1;
+	}
+
+	// Si el model1 no es nulo lo pintamos
+	if (model1 != NULL)
+		model1->draw(mode);
+
+	else if(modelView == 9)
+	{		
+		lata_sup->draw(mode);
+		lata_cue->draw(mode);
+		lata_inf->draw(mode);
+		peon1->draw(mode);
+		peon2->draw(mode);
+		peon3->draw(mode);						
+	}
+
+	else if(modelView == 0)
+	{
+		estrellas->draw(mode);
+		sol->draw(mode);
+		glPushMatrix();
+			glRotatef(-pos_tierra,0,1,0);
+			glTranslatef(10,0,0);
+			glRotatef(pos_tierra,0,1,0);
+			tierra->draw(mode);
+			glPushMatrix();
+				glRotatef(pos_luna,0,1,0);
+				glTranslatef(2,0,0);
+				luna->draw(mode);
+			glPopMatrix();
+		glPopMatrix();
+	}	
+
+	else if(modelView == 1)
+	{
+		glPushMatrix();
+		glTranslatef(-2,-2,0);
+		cuad.dibujar(mode);
+		glPopMatrix();
+	}
+}
+
+
+//**************************************************************************
+//
+//***************************************************************************
+
+void draw_scene(void)
+{
+	clear_window();
+	change_observer();
+	draw_axis();
+	draw_objects();
+	glutSwapBuffers();
+}
+
+
+
+//***************************************************************************
+// Funcion llamada cuando se produce un cambio en el tamaño de la ventana
+//
+// el evento manda a la funcion:
+// nuevo ancho
+// nuevo alto
+//***************************************************************************
+void change_window_size(int Ancho1,int Alto1)
+{
+	UI_window_width = Ancho1;
+	UI_window_height = Alto1;
+
+	change_projection();
+	glViewport(0,0,Ancho1,Alto1);
+	glutPostRedisplay();
+}
+
+
+
+//***************************************************************************
+// Funcion llamada cuando se produce aprieta una tecla normal
+//
+// el evento manda a la funcion:
+// codigo de la tecla
+// posicion x del raton
+// posicion y del raton
+//***************************************************************************
+
+void normal_keys(unsigned char Tecla1,int x,int y)
+{
+
+	switch (Tecla1)
+	{
+		case 'q':
+			exit(0);
+
+		case '1':
+		{
+			mx = my = mz = 0;			
+			model1 = new Model_Ply("data/beethoven.ply");
+			model1->generarNormales();						
+			if(numMaterial == 0){
+			GLfloat matAmbient[] = {0.0215, 0.1745, 0.0215, 1.0};
+			GLfloat matDiffuse[] = {0.0215, 0.1745, 0.0215, 1.0};
+			GLfloat matSpecular[] = {0.633, 0.727811, 0.633, 1.0};
+			float shininess = 20;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1, 1, 1, 1.0);
+			}
+			else if(numMaterial == 1){
+			GLfloat matAmbient[] = {0.19225, 0.19225, 0.19225, 1.0}; 	 	 	
+			GLfloat matDiffuse[] = {0.50754, 0.50754, 0.50754, 1.0};
+			GLfloat matSpecular[] = {0.508273, 0.508273, 0.508273, 1.0};
+			float shininess = 50;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1, 1, 1, 1.0);
+			}
+			else if(numMaterial == 2){
+			GLfloat matAmbient[] = {0.05, 0.05, 0.0, 1.0}; 	 		 	 	 	
+			GLfloat matDiffuse[] = {0.5, 0.5, 0.4, 1.0};
+			GLfloat matSpecular[] = {0.7, 0.7, 0.04, 1.0};
+			float shininess = 1;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1, 1, 1, 1.0);
+			}
+			else{
+			model1->loadImage("data/text-madera.jpg");
+			}
+		}
+			break;
+
+		case '2':		
+		{			
+			mx = my = mz = 0;			
+			model1 = new Model_Revolution(3, 180, 180);					
+			if(numMaterial == 0){
+			GLfloat matAmbient[] = {0.0215, 0.1745, 0.0215, 1.0};
+			GLfloat matDiffuse[] = {0.0215, 0.1745, 0.0215, 1.0};
+			GLfloat matSpecular[] = {0.633, 0.727811, 0.633, 1.0};
+			float shininess = 20;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1.0,1.0,1.0,1.0);
+			}
+			else if(numMaterial == 1){
+			GLfloat matAmbient[] = {0.0, 0.0, 0.0, 1.0}; 	 	 	
+			GLfloat matDiffuse[] = {0.0, 0.0, 0.0, 1.0};
+			GLfloat matSpecular[] = {1.0, 1.0, 1.0, 1.0};
+			float shininess = 128;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1, 1, 1, 1.0);
+			}
+			else if(numMaterial == 2){
+			GLfloat matAmbient[] = {0.05, 0.05, 0.0, 1.0}; 	 		 	 	 	
+			GLfloat matDiffuse[] = {0.5, 0.5, 0.4, 1.0};
+			GLfloat matSpecular[] = {0.7, 0.7, 0.04, 1.0};
+			float shininess = 1;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1.0, 1.0, 1.0, 1.0);
+			}
+			else{
+			model1->loadImage("data/text-madera.jpg");
+			}
+		}	
+			break;
+
+		case '3':		
+		{
+			mx = my = mz = 0;
+			Model_Ply model_temp = Model_Ply("data/perfil.ply");
+			model1 = new Model_Revolution(model_temp.getVertices(), 50);
+			if(numMaterial == 0){
+			GLfloat matAmbient[] = {0.0215, 0.1745, 0.0215, 1.0};
+			GLfloat matDiffuse[] = {0.0215, 0.1745, 0.0215, 1.0};
+			GLfloat matSpecular[] = {0.633, 0.727811, 0.633, 1.0};
+			float shininess = 20;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1,1,1,1);
+			}
+			else if(numMaterial == 1){
+			GLfloat matAmbient[] = {0.19225, 0.19225, 0.19225, 1.0}; 	 	 	
+			GLfloat matDiffuse[] = {0.50754, 0.50754, 0.50754, 1.0};
+			GLfloat matSpecular[] = {0.508273, 0.508273, 0.508273, 1.0};
+			float shininess = 50;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1, 1, 1, 1);
+			}
+			else if(numMaterial == 2){
+			GLfloat matAmbient[] = {0.05, 0.05, 0.0, 1.0}; 	 		 	 	 	
+			GLfloat matDiffuse[] = {0.5, 0.5, 0.4, 1.0};
+			GLfloat matSpecular[] = {0.7, 0.7, 0.04, 1.0};
+			float shininess = 1;
+			glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matAmbient);
+			glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matDiffuse);
+			glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+			model1->setColor(1, 1, 1, 1);
+			}
+			else{
+			model1->loadImage("data/text-madera.jpg");
+			}
+		}	
+			break;
+
+		case '4':
+		{
+			mx = my = mz = 0;
+			modelView = 9;
+			model1 = NULL;
+			// Cargamos los valores
+			Model_Ply model_temp = Model_Ply("data/lata-psup.ply");
+			lata_sup = new Model_Revolution(model_temp.getVertices(), 50);
+			lata_sup->setColor(0.184314, 0.309804, 0.309804, 1.0);
+
+			model_temp = Model_Ply("data/lata-pcue.ply");
+			lata_cue = new Model_Revolution(model_temp.getVertices(), 50);
+			lata_cue->loadImage("data/text-lata-1.jpg");
+			// lata_cue->setZoom(2);
+
+			model_temp = Model_Ply("data/lata-pinf.ply");
+			lata_inf = new Model_Revolution(model_temp.getVertices(), 50);
+			lata_inf->setColor(0.184314, 0.309804, 0.309804, 1.0);
+
+			model_temp = Model_Ply("data/perfil.ply");
+			peon1 = new Model_Revolution(model_temp.getVertices(), 60); //Madera
+			peon1->loadImage("data/text-madera.jpg");
+
+
+			peon2 = new Model_Revolution(model_temp.getVertices(), 50);
+			peon2->setColor(0.0, 0.0, 1.0, 1.0);
+
+			peon3 = new Model_Revolution(model_temp.getVertices(), 50);
+			peon3->setColor(0.0, 1.0, 0.0, 1.0);
+
+			// Movemos los peones
+			peon1->setCenter(3.0,0.0,0.0);
+			peon2->setCenter(1.0,0.0,0.0);
+			peon3->setCenter(-2.0,0.0,0.0);
+		}
+			break;
+		
+
+		case '5':
+		{
+			mx = my = mz = 0;
+			modelView = 0;
+			model1 = NULL;
+			tierra = new Model_Revolution(1, 30, 30); //tierra
+			tierra->loadImage("data/text-dia.jpg");
+			estrellas = new Model_Revolution(50, 30, 30);
+			estrellas->loadImage("data/text-estrellas.jpg");			
+			sol = new Model_Revolution(4, 30, 30);
+			sol->loadImage("data/text-sol.jpg");
+			luna = new Model_Revolution(0.3, 30, 30);
+			luna->loadImage("data/text-moon.jpg");
+
+		}
+			break;
+
+		case '6':
+		{	
+			mx = my = mz = 0;
+			modelView = 1;
+			model1 = NULL;
+
+			cuad.loadImage("data/text-lata-1.jpg");
+			cuad.initialize(4,4);
+
+		}
+			break;
+		
+		// Z activa o desactiva la luz.
+		case 'z':
+			luz = !luz;
+			if(luz)
+				glEnable(GL_LIGHTING);
+			else
+				glDisable(GL_LIGHTING);
+			break;	
+
+		// X activa o desactiva la luz 1.
+		case 'x':
+			luz1 = !luz1;
+			if(luz1)
+				glEnable(GL_LIGHT0);
+			else
+				glDisable(GL_LIGHT0);
+			break;
+
+		// C activa o desactiva la luz 2.
+		case 'c':
+			luz2 = !luz2;
+			if(luz2)
+				glEnable(GL_LIGHT1);
+			else
+				glDisable(GL_LIGHT1);
+			break;
+
+		// V activa o desactiva la animación de la luz.
+		case 'v':
+			animar_luz = !animar_luz;
+			break;
+
+		case 'n':
+			cout << "numMaterial:" << numMaterial;
+			numMaterial++;
+			if(numMaterial == 4)
+				numMaterial = 0;
+			break;
+
+		//Cambia el modo de visualización.
+		case 'm': 
+			modo++;
+			break;
+
+		// Mueve el objeto hacia atrás.
+		case 'w':
+			mz -= 0.1;			
+			break;
+
+		// Mueve el objeto hacia delante.
+		case 's':
+			mz += 0.1;			
+			break;
+
+		// Mueve el objeto hacia delante.
+		case 'a':
+			mx -= 0.1;			
+			break;
+
+		case 'd':
+			mx += 0.1;
+			break;
+
+		// Mueve el objeto hacia arriba.
+		case 'e':
+			my += 0.1; 
+			break;
+
+		// Mueve el objeto hacia abajo.
+		case 'r':
+			my -= 0.1;			
+			break;
+
+		// Vuelve a colocar el objeto en el centro.
+		case 'f':
+			mx = my = mz = 0;			
+			break;
+
+
+	}
+
+	// Llamamos a la sobrecarga de cada modelo de las teclas, por si se quisiera
+	// extender el comportamiento dependiendo del modelo
+	if (model1 != NULL)
+		model1->process_key(Tecla1);
+
+	// Repintamos
+	glutPostRedisplay();
+}
+
+//***************************************************************************
+// Funcion llamada cuando se produce aprieta una tecla especial
+//
+// el evento manda a la funcion:
+// codigo de la tecla
+// posicion x del raton
+// posicion y del raton
+
+//***************************************************************************
+
+void special_keys(int Tecla1,int x,int y)
+{
+
+	switch (Tecla1){
+		case GLUT_KEY_LEFT:Observer_angle_y--;break;
+		case GLUT_KEY_RIGHT:Observer_angle_y++;break;
+		case GLUT_KEY_UP:Observer_angle_x--;break;
+		case GLUT_KEY_DOWN:Observer_angle_x++;break;
+		case GLUT_KEY_PAGE_UP:Observer_distance*=1.2;break;
+		case GLUT_KEY_PAGE_DOWN:Observer_distance/=1.2;break;
+	}
+
+	glutPostRedisplay();
+}
+
+void change_spotlight()
+{
+
+    GLfloat light_ambient[] = { 1.0, 0.0, 0.0, 1.0 };
+	GLfloat light_diffuse[] = { 1.0, 0.0, 0.0, 1.0 };
+	GLfloat light_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+
+	light_position[0] = light_position[0]*cos((M_PI/180))-light_position[2]*sin((M_PI/180));
+	light_position[2] = light_position[0]*sin((M_PI/180))+light_position[2]*cos((M_PI/180));
+
+	GLfloat spotlight_direction[3] = {-light_position[0], -light_position[1], -light_position[2] };
+
+	glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER,GL_TRUE);
+
+	glLightfv(GL_LIGHT1, GL_AMBIENT, light_ambient);
+	glLightfv(GL_LIGHT1, GL_DIFFUSE, light_diffuse);
+	glLightfv(GL_LIGHT1, GL_SPECULAR, light_specular);
+
+    glEnable(GL_LIGHT1);
+    glLightfv(GL_LIGHT1, GL_POSITION, light_position);
+    glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 10.0);
+    glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 20.0);
+    glLightfv(GL_LIGHT1,GL_SPOT_DIRECTION,spotlight_direction);
+
+}
+
+//***************************************************************************
+// Activa la iluminación (light 0)
+//***************************************************************************
+void EnableLighting(void) {
+
+
+	GLfloat light_ambient[] = { 0.3, 0.3, 0.3, 1.0 };
+	GLfloat light_diffuse[] = { 0.5, 0.5, 0.5, 1.0 };
+	GLfloat light_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+	GLfloat light_position[] = { 20.0, 10.0, 30.0, 1.0 };
+	GLfloat matSpecular[] = {1.0, 1.0, 1.0, 1.0};
+	float shininess = 20;
+
+	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
+	glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+/*
+	glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpecular);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, matSpecular);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, matSpecular);
+	glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shininess);
+
+
+
+	GLfloat emision[] = {0.3, 0.3, 0.3, 1.0};
+	glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emision);
+*/
+	glEnable(GL_SMOOTH);     // enable smooth shading
+	glEnable(GL_LIGHTING);   // enable lighting
+	glEnable(GL_LIGHT0);     // enable light 0
+	glEnable(GL_DEPTH_TEST);   //Activa el buffer de profundidad.
+	glShadeModel(GL_SMOOTH);
+
+
+	//change_spotlight();
+}
+
+
+void animacion(void)
+{
+	if(animar_luz)
+	{
+		pos_tierra += 1;
+		pos_luna += 1;
+		change_spotlight();
+		glutPostRedisplay();
+	}
+}
+
+
+//***************************************************************************
+// Funcion de incializacion
+//***************************************************************************
+void initialize(void)
+{
+	// se inicalizan la ventana y los planos de corte
+	Window_width=1;
+	Window_height=1;
+	Front_plane=1;
+	Back_plane=1000;
+
+	// se inicia la posicion del observador, en el eje z
+	Observer_distance=2*Front_plane;
+	Observer_angle_x=0;
+	Observer_angle_y=0;
+
+	// se indica cual sera el color para limpiar la ventana	(r,v,a,al)
+	// blanco=(1,1,1,1) rojo=(1,0,0,1), ...
+	glClearColor(1,1,1,1);
+
+	// se habilita el z-bufer
+	glEnable(GL_DEPTH_TEST);
+
+	// Activamos la iluminacion
+  	EnableLighting();
+
+	change_projection();
+	glViewport(0,0,UI_window_width,UI_window_height);
+
+}
+
+
+//***************************************************************************
+// Programa principal
+//
+// Se encarga de iniciar la ventana, asignar las funciones e comenzar el
+// bucle de eventos
+//***************************************************************************
+
+int main(int argc, char **argv)
+{
+	// se llama a la inicialización de glut
+	glutInit(&argc, argv);
+
+	// se indica las caracteristicas que se desean para la visualización con OpenGL
+	// Las posibilidades son:
+	// GLUT_SIMPLE -> memoria de imagen simple
+	// GLUT_DOUBLE -> memoria de imagen doble
+	// GLUT_INDEX -> memoria de imagen con color indizado
+	// GLUT_RGB -> memoria de imagen con componentes rojo, verde y azul para cada pixel
+	// GLUT_RGBA -> memoria de imagen con componentes rojo, verde, azul y alfa para cada pixel
+	// GLUT_DEPTH -> memoria de profundidad o z-bufer
+	// GLUT_STENCIL -> memoria de estarcido
+	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
+
+	// posicion de la esquina inferior izquierdad de la ventana
+	glutInitWindowPosition(UI_window_pos_x,UI_window_pos_y);
+
+	// tamaño de la ventana (ancho y alto)
+	glutInitWindowSize(UI_window_width,UI_window_height);
+
+	// llamada para crear la ventana, indicando el titulo (no se visualiza hasta que se llama
+	// al bucle de eventos)
+	glutCreateWindow("Informatica Grafica");
+
+	// asignación de la funcion llamada "dibujar" al evento de dibujo
+	glutDisplayFunc(draw_scene);
+	// asignación de la funcion llamada "cambiar_tamanio_ventana" al evento correspondiente
+	glutReshapeFunc(change_window_size);
+	// asignación de la funcion llamada "tecla_normal" al evento correspondiente
+	glutKeyboardFunc(normal_keys);
+	// asignación de la funcion llamada "tecla_Especial" al evento correspondiente
+	glutSpecialFunc(special_keys);
+	// asignación de la función llamada "animacion" al evento correspondiente
+	glutIdleFunc(animacion);
+
+	// funcion de inicialización
+	initialize();
+
+
+	// Forzamos una llamada a la función normal_keys para cargar un modelo
+	normal_keys('1', 0, 0); // Lata y peones
+
+
+	// inicio del bucle de eventos
+	glutMainLoop();
+	return 0;
+}
